@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <string>
 #include <math.h>
+#include <cfloat>
 #include "params.h"
 
 #define MIN3(x,y,z)  ((y) <= (z) ? \
@@ -36,6 +37,7 @@ class Image{
     inline std::vector<uint> imgSize() const{return imgSize_;}
 
     inline uint at(const uint i, const uint j, const uint k ) const{return I_.at(i).at(j).at(k);};
+    inline uint set_value(const uint i, const uint j, const uint k, const uint val ) {I_.at(i).at(j).at(k) = val;};
 
     Image convertToColorspace(const Colorspace colorspace) const;
 
