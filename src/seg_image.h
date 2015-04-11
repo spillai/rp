@@ -34,13 +34,15 @@ class BBox{
 
 class SegImage{
   public:
-    SegImage(const Image& I, const Params::SpParams& spParams);
+  SegImage(const Image& I, const Params::SpParams& spParams, const PixelList& pix_seeds = PixelList());
     inline uint h() const{return h_;}
     inline uint w() const{return w_;}
     inline uint c() const{return c_;}
     inline std::vector<uint> imgSize() const{return imgSize_;}
     inline uint at(const uint i, const uint j) const{return I_.at(i).at(j);};
     inline uint nSps() const{return nSps_;};
+    inline uint nValidSps() const{return nValidSps_;};
+    inline uint SpId(const uint i) {return spInfo_.validSps_[i];};
     inline double normArea(const uint i) const{return spInfo_.normAreas_.at(i);}
     inline uint normArea16b(const uint i) const{return spInfo_.normAreas16b_.at(i);}
 
@@ -60,18 +62,20 @@ class SegImage{
       std::vector<uint> nPixels_;
       std::vector<double> normAreas_;
       std::vector<uint> normAreas16b_;
+      std::vector<uint> validSps_;
     };
 
   private:
 
     std::vector<std::vector<uint> > I_; //indexes (from 0 to nSps_-1)
     uint nSps_;
+    uint nValidSps_;
     uint h_;
     uint w_;
     uint c_;
     std::vector<uint> imgSize_;
 
-    void ExtractSpInfo();
+    void ExtractSpInfo(const PixelList& pix_seeds = PixelList());
 
     uint FindMinValue() const;
     uint FindMaxValue() const;
@@ -79,7 +83,7 @@ class SegImage{
     SpInfo spInfo_;
 };
 
-SegImage::SegImage(const Image& I, const Params::SpParams& spParams){
+SegImage::SegImage(const Image& I, const Params::SpParams& spParams, const PixelList& pix_seeds){
 
   const std::vector<uint>& dims=I.imgSize();
 
@@ -109,6 +113,7 @@ SegImage::SegImage(const Image& I, const Params::SpParams& spParams){
 
   assert(num_ccs>0);
 
+  nValidSps_ = 0;
   nSps_=num_ccs;
 
   //Convert F to my Image format
@@ -130,7 +135,7 @@ SegImage::SegImage(const Image& I, const Params::SpParams& spParams){
   assert(this->FindMinValue()==0);
   assert(this->FindMaxValue()==(nSps_-1));
 
-  this->ExtractSpInfo();
+  this->ExtractSpInfo(pix_seeds);
 }
 
 
@@ -170,7 +175,7 @@ uint SegImage::FindMinValue() const{
 
 }
 
-void SegImage::ExtractSpInfo(){
+void SegImage::ExtractSpInfo(const PixelList& pix_seeds){
 
   std::vector<PixelList >& pl=spInfo_.pixelLists_;
   std::vector< std::vector<uint> >& coMat=spInfo_.coMatrix_;
@@ -203,6 +208,23 @@ void SegImage::ExtractSpInfo(){
     }
   }
 
+  // Validate pixel seeds
+  std::vector<bool> valid_sps(nSps_, false);
+  for (int j=0; j<pix_seeds.size(); j++) {
+    pid=I_.at(pix_seeds[j].second).at(pix_seeds[j].first);
+    valid_sps[pid] = true;
+  }
+
+  // Populate seeded superpixels
+  std::vector<uint>& validSps=spInfo_.validSps_;
+  validSps.clear();
+  for (int j=0; j<valid_sps.size(); j++) {
+    if (valid_sps[j])
+      validSps.push_back(j);
+  }
+  nValidSps_ = validSps.size();
+
+  
 #ifndef NDEBUG
   for(uint i=0; i<nSps_; i++){
     assert(bbs.at(i).IsConsistent());

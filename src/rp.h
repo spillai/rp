@@ -7,6 +7,7 @@
 #include "seg_image.h"
 #include "params.h"
 #include "stopwatch/Stopwatch.h"
+#include <opencv2/opencv.hpp>
 
 #if !defined(MAX)
 #define    MAX(A, B)    ((A) > (B) ? (A) : (B))
@@ -20,7 +21,8 @@ double Unif01(){
   return ((double) rand() / (double) (RAND_MAX+1.0));
 }
 
-std::vector<BBox> RP(const Image& rgbI, const Params& params){
+static std::vector<cv::Vec3b> colors;
+std::vector<BBox> RP(const Image& rgbI, const Params& params, const PixelList& pix_seeds){
 
   /*Preprocessing stage*/
 
@@ -44,11 +46,25 @@ std::vector<BBox> RP(const Image& rgbI, const Params& params){
     swatch.report("Colorspace");
 
   swatch.start("Segmentation");
-  SegImage segImg(I,params.spParams());
+  SegImage segImg(I,params.spParams(), pix_seeds);
   swatch.stop("Segmentation");
   if(params.verbose())
     swatch.report("Segmentation");
 
+  if (!colors.size()) { 
+    colors.resize(64);
+    for (int j=0; j<colors.size(); j++)
+      colors[j] = cv::Vec3b( (rand()&255), (rand()&255), (rand()&255) );
+  }
+
+  cv::Mat3b segcol = cv::Mat3b::zeros(segImg.h(), segImg.w());
+  for (int y=0; y<segImg.h(); y++) {
+    for (int x=0; x<segImg.w(); x++) {
+      segcol(y,x) = colors[segImg.at(y,x) % colors.size()];
+    }
+  }
+  cv::imshow("seg", segcol);
+  
   swatch.start("Graph+Preprocessing");
   Graph graph(rgbI, segImg, params.fWeights());
   swatch.stop("Graph+Preprocessing");
@@ -57,6 +73,7 @@ std::vector<BBox> RP(const Image& rgbI, const Params& params){
 
   const uint nProposals=params.nProposals();
   const uint nSps=segImg.nSps();
+  const uint nValidSps=segImg.nValidSps();
   std::vector<std::vector<bool> > spGroups(nProposals, std::vector<bool>(nSps,0));
 
   std::vector<BBox> bbProposals(nProposals, BBox());
@@ -64,7 +81,7 @@ std::vector<BBox> RP(const Image& rgbI, const Params& params){
 
   swatch.start("Proposal generation");
 
-  uint nextSp=0, oSp=0;
+  uint nextSp=0, nextValidSp=0, oSp=0;
   uint n=0, nSpsInGroup=0;
   double E0=0.0, E=0.0, nextS=0.0, Ea=0.0, groupA_double=0.0;
   uint groupA=0;
@@ -72,7 +89,16 @@ std::vector<BBox> RP(const Image& rgbI, const Params& params){
   IntTree T(nSps);
   for( uint k=0; k<nProposals; k++){
 
-    nextSp=floor((rand()%nSps)+0.5);//Round
+
+    if (nValidSps) {
+      // Guided sampling
+      nextValidSp=floor((rand() % nValidSps)+0.5);//Round
+      nextSp = segImg.SpId(nextValidSp);
+    } else {
+      // Random sampling
+      nextSp=floor((rand()%nSps)+0.5);//Round
+    }
+
 
     assert(nextSp>=0 && nextSp<nSps && "Bad seed");
     assert(k < spGroups.size());
