@@ -13,6 +13,7 @@
 
 typedef std::vector<std::pair<uint, uint> > PixelList;
 typedef std::pair<uint, uint> PixCoords;
+typedef std::vector<std::pair<float, PixCoords> > DPixelList;
 
 //BBox in C++ coordinates (starts from 0)
 class BBox{   
@@ -34,12 +35,16 @@ class BBox{
 
 class SegImage{
   public:
-  SegImage(const Image& I, const Params::SpParams& spParams, const PixelList& pix_seeds = PixelList());
+  SegImage(const Image& I, const Params::SpParams& spParams, const DPixelList& pix_seeds = DPixelList());
     inline uint h() const{return h_;}
     inline uint w() const{return w_;}
     inline uint c() const{return c_;}
     inline std::vector<uint> imgSize() const{return imgSize_;}
     inline uint at(const uint i, const uint j) const{return I_.at(i).at(j);};
+    inline float depth_at(const uint i, const uint j) const {
+      uint pid = at(i,j);
+      return spInfo_.SpDepth_[pid];
+    }
     inline uint nSps() const{return nSps_;};
     inline uint nValidSps() const{return nValidSps_;};
     inline uint SpId(const uint i) {return spInfo_.validSps_[i];};
@@ -63,6 +68,7 @@ class SegImage{
       std::vector<double> normAreas_;
       std::vector<uint> normAreas16b_;
       std::vector<uint> validSps_;
+      std::vector<float> SpDepth_; 
     };
 
   private:
@@ -75,7 +81,7 @@ class SegImage{
     uint c_;
     std::vector<uint> imgSize_;
 
-    void ExtractSpInfo(const PixelList& pix_seeds = PixelList());
+    void ExtractSpInfo(const DPixelList& pix_seeds = DPixelList());
 
     uint FindMinValue() const;
     uint FindMaxValue() const;
@@ -83,7 +89,7 @@ class SegImage{
     SpInfo spInfo_;
 };
 
-SegImage::SegImage(const Image& I, const Params::SpParams& spParams, const PixelList& pix_seeds){
+SegImage::SegImage(const Image& I, const Params::SpParams& spParams, const DPixelList& pix_seeds){
 
   const std::vector<uint>& dims=I.imgSize();
 
@@ -175,7 +181,7 @@ uint SegImage::FindMinValue() const{
 
 }
 
-void SegImage::ExtractSpInfo(const PixelList& pix_seeds){
+void SegImage::ExtractSpInfo(const DPixelList& pix_seeds){
 
   std::vector<PixelList >& pl=spInfo_.pixelLists_;
   std::vector< std::vector<uint> >& coMat=spInfo_.coMatrix_;
@@ -210,17 +216,32 @@ void SegImage::ExtractSpInfo(const PixelList& pix_seeds){
 
   // Validate pixel seeds
   std::vector<bool> valid_sps(nSps_, false);
+  std::vector<std::vector<float> > sp_depths(nSps_);
   for (int j=0; j<pix_seeds.size(); j++) {
-    pid=I_.at(pix_seeds[j].second).at(pix_seeds[j].first);
+    const PixCoords& px = pix_seeds[j].second;
+    pid=I_.at(px.second).at(px.first);
     valid_sps[pid] = true;
+    sp_depths[pid].push_back(pix_seeds[j].first);
   }
+
+  // Compute median depths for each seeded superpixel
+  std::vector<float>& SpDepth=spInfo_.SpDepth_;  
+  SpDepth.resize(nSps_, 0.0);
 
   // Populate seeded superpixels
   std::vector<uint>& validSps=spInfo_.validSps_;
   validSps.clear();
   for (int j=0; j<valid_sps.size(); j++) {
-    if (valid_sps[j])
-      validSps.push_back(j);
+    if (!valid_sps[j])
+      continue;
+    // Add valid idx
+    validSps.push_back(j);
+    
+    // Compute median depth
+    const int sz = sp_depths[j].size();
+    std::nth_element(sp_depths[j].begin(), sp_depths[j].begin() + sz/2, sp_depths[j].end());
+    SpDepth[j] = sp_depths[j][sz/2];
+
   }
   nValidSps_ = validSps.size();
 

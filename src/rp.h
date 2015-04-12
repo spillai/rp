@@ -22,7 +22,7 @@ double Unif01(){
 }
 
 static std::vector<cv::Vec3b> colors;
-std::vector<BBox> RP(const Image& rgbI, const Params& params, const PixelList& pix_seeds){
+std::vector<BBox> RP(const Image& rgbI, const Params& params, const DPixelList& pix_seeds){
 
   /*Preprocessing stage*/
 
@@ -57,13 +57,16 @@ std::vector<BBox> RP(const Image& rgbI, const Params& params, const PixelList& p
       colors[j] = cv::Vec3b( (rand()&255), (rand()&255), (rand()&255) );
   }
 
+  cv::Mat1f depthcol = cv::Mat1f::zeros(segImg.h(), segImg.w());
   cv::Mat3b segcol = cv::Mat3b::zeros(segImg.h(), segImg.w());
   for (int y=0; y<segImg.h(); y++) {
     for (int x=0; x<segImg.w(); x++) {
       segcol(y,x) = colors[segImg.at(y,x) % colors.size()];
+      depthcol(y,x) = segImg.depth_at(y,x);
     }
   }
   cv::imshow("seg", segcol);
+  cv::imshow("depth", depthcol);
   
   swatch.start("Graph+Preprocessing");
   Graph graph(rgbI, segImg, params.fWeights());
