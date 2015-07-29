@@ -13,6 +13,7 @@
 
 typedef std::vector<std::pair<uint, uint> > PixelList;
 typedef std::pair<uint, uint> PixCoords;
+typedef std::pair<double, PixCoords> DPixCoords;
 typedef std::vector<std::pair<float, PixCoords> > DPixelList;
 
 //BBox in C++ coordinates (starts from 0)
@@ -22,11 +23,13 @@ class BBox{
   uint iMin;
   uint jMax;
   uint iMax;
+  double llh;
   BBox(){
     jMin=UINT_MAX;
     iMin=UINT_MAX;
     jMax=0;
     iMax=0;
+    llh=0;
   };
   bool IsConsistent() const{
     return (iMin<=iMax) && (jMin<=jMax);
